@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verificador SHA-256</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; background: #f7f7f2; color: #222; }
+  .card { background: #fff; padding: 25px; border: 1px solid #ddd; border-radius: 6px; }
+  h1 { font-size: 1.3rem; margin: 0 0 20px; color: #1f3a52; }
+  h2 { font-size: 1rem; margin: 30px 0 15px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; color: #333; }
+  label { display: block; font-weight: bold; margin-bottom: 6px; font-size: 0.9rem; }
+  input[type="file"], input[type="text"] {
+    width: 100%; padding: 9px; box-sizing: border-box;
+    border: 1px solid #bbb; border-radius: 4px; font-family: monospace; font-size: 0.85rem;
+  }
+  .group { margin-bottom: 16px; }
+  button {
+    background: #3b4cca; color: #fff; border: none; padding: 11px 18px;
+    font-size: 0.95rem; border-radius: 4px; cursor: pointer; width: 100%;
+  }
+  button:hover { background: #2f3eb0; }
+  #resultado { display: none; margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
+  .hash { word-break: break-all; font-family: monospace; background: #eef1f4; padding: 10px; border-radius: 3px; margin-top: 5px; font-size: 0.85rem; }
+  .ok { background: #d4edda; color: #155724; padding: 10px; border-radius: 3px; margin-top: 12px; font-size: 0.9rem; }
+  .fail { background: #f8d7da; color: #721c24; padding: 10px; border-radius: 3px; margin-top: 12px; font-size: 0.9rem; }
+  .info { font-size: 0.85rem; color: #555; margin-top: 8px; }
+  .copy { background: #6c757d; width: auto; padding: 6px 12px; font-size: 0.8rem; margin-top: 10px; }
+  .copy:hover { background: #5a6268; }
+  .vt-btn { display: inline-block; background: #3949ab; color: white; text-decoration: none; padding: 6px 12px; font-size: 0.8rem; border-radius: 4px; margin-top: 10px; margin-left: 8px; font-weight: bold; }
+  .vt-btn:hover { background: #283593; }
+  .vt-note { font-size: 0.75rem; color: #777; margin-top: 6px; }
+  .veredicto { margin-top: 15px; padding: 12px; border-radius: 4px; font-size: 0.9rem; display: none; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Verificador de integridad SHA-256</h1>
+
+  <div class="group">
+    <label for="archivo">Archivo</label>
+    <input type="file" id="archivo">
+  </div>
+
+  <div class="group">
+    <label for="referencia">Hash de referencia (opcional)</label>
+    <input type="text" id="referencia" placeholder="64 caracteres hexadecimales">
+  </div>
+
+  <button onclick="calcular()">Calcular hash</button>
+
+  <div id="resultado">
+    <strong>Hash SHA-256:</strong>
+    <div id="hashCalculado" class="hash"></div>
+    <div id="detalles" class="info"></div>
+    <div id="estado"></div>
+    <div style="margin-top: 10px;">
+      <button class="copy" onclick="copiarHash()">Copiar hash</button>
+      <a id="vtLink" href="#" target="_blank" rel="noopener" class="vt-btn" style="display:none;">Consultar en VirusTotal ↗</a>
+    </div>
+    <div id="vtNota" class="vt-note" style="display:none;">
+      Si el hash no aparece en VirusTotal, significa que el archivo no está en su base de datos pública.
+    </div>
+  </div>
+
+  <h2>Pruebas de integridad</h2>
+
+  <div class="group">
+    <label for="p1">Prueba 1 — Archivo original</label>
+    <input type="text" id="p1" placeholder="Hash del archivo original">
+  </div>
+
+  <div class="group">
+    <label for="p2">Prueba 2 — Mismo archivo sin cambios</label>
+    <input type="text" id="p2" placeholder="Hash del archivo recalculado">
+  </div>
+
+  <div class="group">
+    <label for="p3">Prueba 3 — Archivo modificado</label>
+    <input type="text" id="p3" placeholder="Hash del archivo con un byte alterado">
+  </div>
+
+  <button onclick="comparar()">Comparar pruebas</button>
+
+  <div id="veredicto" class="veredicto"></div>
+</div>
+
+<script>
+let hashActual = '';
+
+async function calcular() {
+  const input = document.getElementById('archivo');
+  const ref = document.getElementById('referencia').value.trim().toLowerCase();
+  const resultado = document.getElementById('resultado');
+  const hashDiv = document.getElementById('hashCalculado');
+  const detalles = document.getElementById('detalles');
+  const estado = document.getElementById('estado');
+  const vtLink = document.getElementById('vtLink');
+  const vtNota = document.getElementById('vtNota');
+
+  if (!input.files.length) {
+    alert('Selecciona un archivo.');
+    return;
+  }
+
+  const file = input.files[0];
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    const hex = Array.from(new Uint8Array(digest))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    const fecha = new Date(file.lastModified).toLocaleString();
+
+    hashActual = hex;
+    hashDiv.textContent = hex;
+    detalles.textContent = file.name + ' — ' + (file.size / 1024).toFixed(2) + ' KB — ' + fecha;
+    resultado.style.display = 'block';
+
+    vtLink.href = 'https://www.virustotal.com/gui/file/' + hex;
+    vtLink.style.display = 'inline-block';
+    vtNota.style.display = 'block';
+
+    if (ref) {
+      if (hex === ref) {
+        estado.className = 'ok';
+        estado.textContent = 'El hash coincide con la referencia.';
+      } else {
+        estado.className = 'fail';
+        estado.textContent = 'El hash no coincide con la referencia.';
+      }
+    } else {
+      estado.className = '';
+      estado.textContent = '';
+    }
+  } catch (e) {
+    console.error(e);
+    alert('No se pudo procesar el archivo.');
+  }
+}
+
+function copiarHash() {
+  if (hashActual) {
+    navigator.clipboard.writeText(hashActual);
+  }
+}
+
+function comparar() {
+  const p1 = document.getElementById('p1').value.trim().toLowerCase();
+  const p2 = document.getElementById('p2').value.trim().toLowerCase();
+  const p3 = document.getElementById('p3').value.trim().toLowerCase();
+  const veredicto = document.getElementById('veredicto');
+
+  if (!p1 || !p2 || !p3) {
+    alert('Completa las tres pruebas antes de comparar.');
+    return;
+  }
+
+  const integridadOk = p1 === p2;
+  const modificacionOk = p1 !== p3;
+
+  veredicto.style.display = 'block';
+
+  if (integridadOk && modificacionOk) {
+    veredicto.className = 'ok';
+    veredicto.innerHTML =
+      '<strong>Resultado:</strong> las pruebas son consistentes.<br>' +
+      'Prueba 1 y 2 coinciden → el archivo no cambió.<br>' +
+      'Prueba 3 difiere → cualquier modificación altera el hash.';
+  } else if (!integridadOk && !modificacionOk) {
+    veredicto.className = 'fail';
+    veredicto.innerHTML =
+      '<strong>Resultado:</strong> las pruebas no son válidas.<br>' +
+      'Prueba 1 y 2 deberían coincidir (mismo archivo).<br>' +
+      'Prueba 3 debería diferir (archivo modificado).';
+  } else if (!integridadOk) {
+    veredicto.className = 'fail';
+    veredicto.innerHTML =
+      '<strong>Resultado:</strong> las pruebas 1 y 2 no coinciden.<br>' +
+      'Si el archivo no se modificó, el hash debería ser idéntico. Revisa los valores.';
+  } else {
+    veredicto.className = 'fail';
+    veredicto.innerHTML =
+      '<strong>Resultado:</strong> la prueba 3 es igual a la 1.<br>' +
+      'Si modificaste el archivo, el hash debería ser distinto. Revisa los valores.';
+  }
+}
+</script>
+</body>
+</html>
